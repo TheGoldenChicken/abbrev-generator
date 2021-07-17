@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr 15 19:13:00 2021
+
+@author: dayman
+"""
+# str.isalnum
+"""
+
+for i, row in enumerate(BoW):
+    delete_rows = []
+    if np.sum(row) < 3:
+        delete_rows.append(i)
+
+# Delete all the rows on death row
+BoW = np.delete(BoW, delete_rows, 1)
+"""
+
+# Print the articles
+#print((json.dumps(articles, indent=3)['content']))
+
+# Why doesn\t the below work :(
+# Because it'll still be a list, you dunce
+#docs = articles[0:]['content']
+
+# This, however, works just fine
+#from operator import itemgetter
+#res = list(map(itemgetter('content'), articles))
+
+
+import numpy as np
+import re
+import json
+
+
+# Open .json file, which is basically a list of dictionaries
+with open('articles.json', "r") as outfile:
+    # Load the current data from the file
+    articles = json.load(outfile)
+
+
+# Get the content for each article
+docs = [i['content'] for i in articles]
+# .lower everything and use regex to get only correct characters
+docs = [i.lower() for i in docs]
+docs = [re.sub('[^a-zåøæ ]+', '', i) for i in docs]
+docs = docs[0:200]
+
+# Vocabulary of unique wrods
+unique_words = []
+for doc in docs:
+    for word in doc.split(' '):
+        if word not in unique_words and len(word) != 0:
+            unique_words.append(word)
+
+def create_bag_of_words(documents, vocabulary):
+    # vocab_size, num_doc: i, j dimensions of numpy arrayz
+    num_doc = len(documents)
+    vocab_size = len(vocabulary)
+    
+    # Used to get an index from a word
+    word2idx = {word: idx for idx, word in enumerate(vocabulary)}
+    bag_of_words = np.zeros((vocab_size, num_doc))
+    
+    # For each document
+    for idx_doc, doc in enumerate(documents):
+        # And for each word, increment the number of that in our bag of words
+        # Here the word2idx is our row, and idx doc is our column
+        for word in doc.split():
+            bag_of_words[word2idx[word], idx_doc] += 1
+    return bag_of_words
+
+
+BoW = create_bag_of_words(docs, unique_words)
+print(len(BoW))
+
+# Remove words that don't appear 10 or more times
+# These are most likely too unique to be useful
+#BoW = BoW[np.sum(BoW, axis = 1) <= 10]
+
+print(len(BoW))
+
+# Creating term by term and doc by doc matrices
+B = np.matmul(BoW, BoW.T)
+C = np.matmul(BoW.T, BoW)
+
+
+
+example_word = "fest udvalg for første år"
+
+print('Now eigendecomposition')
+
+# Remember, SVD is done because of X = U*sigma*VT
+# v are the singular vectors of BoW
+# sv are the singular values of BoW
+# u is a unitary matrix, containing...somthing
+U, sv, V = np.linalg.svd(BoW, full_matrices = False)
+# U and V define two different correlations
+# U define correlation between words, V between documents
+
+print('U mat',U.shape)
+print('V mat',V.shape)
+print('Singular values',sv.shape)
+
+print('BOW shape is',BoW.shape)
+
+P_word_wise = V@np.diag(1./np.sqrt(sv))
+#P_doc_wise = V@np.diag(1./np.sqrt(sv))
+#P_doc_wise = np.diag(1./np.sqrt(sv))@U
+P_doc_wise = np.diag(1./np.sqrt(sv))@U.T
+
+print('P shape is, P_doc_wise shape is', P_word_wise.shape, P_doc_wise.shape)
+
+# We then project our BoW onto the V matrix, which holds document wise correlation
+# This is because, information about how each word relates to a specific document
+# Is held in the doc-by-doc matrix
+z_doc = P_doc_wise@BoW
+z_word = BoW@P_word_wise
+
+# Now all the vectors will have an angle in relation to each other
+# We need only find the right angle...
+
+# Dot product of the two vectors to be examined, over the product of the length of the vectors
+# The length found as dot product of the vector and its transpose
+# Although I believe, since they are unitary, all vectors of U are of length 1
+cos_sim = lambda x, y:  np.dot(x.T, y)/np.sqrt(np.dot(x.T, x)*np.dot(y.T,y))
+
+example_name = ['her', 'er', 'første', 'der', 'ord']
+final_name = ["p", 'e','n','i','s']
+
+# Here we need something to check if the test_word is actully in the vocabulary
+
+
+word_sims = {word: [] for word in example_name}
+
+
+# For each word that must be examined
+for i,word in enumerate(example_name):
+    # Get the index of the word in our representations
+    word_idx = unique_words.index(word)
+    
+    # And get vector representation
+    curr_vec = z_word[word_idx]
+    
+    # Compare to every other word in our dictionary
+    for r, similar in enumerate(unique_words):
+        
+        # Only take the ones whose first letter spell abbrev.
+        if similar[0] == final_name[i]:
+            cossim = cos_sim(curr_vec, z_word[r])
+            
+            # And only get those whose cosine similarity is above a threshold
+            if cossim >= 0.95:
+                word_sims[word].append(similar)
+                print(word, similar, cossim)
+
+
+def generate_abbrev():
+    
+    i = 0
+    
+    while True:
+        current_abbrev = ''
+        for word in example_name:
+            current_abbrev += word_sims[word][i] + ' '
+        
+        print(current_abbrev)
+        
+        inp = input('Good enough? y\n')
+        
+        if inp == 'n':
+            i += 1
+            pass
+        
+        if inp == 'y':
+            break
+
+#generate_abbrev()
+
+print('completed')
+
+"""
+def eigendecompose(X):
+    ''' Return the eigendecomposition (E, V) of X s.t. eigenvalues are sorted descendingly '''
+    lam, V = np.linalg.eigh(X)
+    sort_idx = np.argsort(lam)[::-1]
+    return lam[sort_idx], V[:, sort_idx]
+
+# See here, that the eigenvalues at 10+ will be extremely small
+
+lambdas, V = eigendecompose(C)
+lambdas, U = eigendecompose(B)
+
+k = 10
+Uk = U[:, :k]
+Lk = lambdas[:k]
+Vk = V[:, :k]
+
+
+# define projection matrix for the documents
+P = np.diag(1./np.sqrt(Lk))@Uk.T
+
+z_doc = P@BoW
+print(P)
+for word in example_word.split(" "):
+    word_bow = create_bag_of_words(word, unique_words)
+    
+    word_bow_proj = P@word_bow
+    
+    cos_sim = lambda x, y:  np.dot(x.T, y)/np.sqrt(np.dot(x.T, x)*np.dot(y.T,y))
+    similarities = np.array([cos_sim(word_bow_proj, doc.T) for doc in z_doc.T])
+"""

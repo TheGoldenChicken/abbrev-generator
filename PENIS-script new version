@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr 15 19:13:00 2021
+
+@author: dayman
+"""
+
+
+# TODO
+# Add progress meter to SVD function
+# Add functionality to check if word in relation string is in vocabulary
+# Weigh words by words they relate to, as well as words next to, 'party FOR', 'party' relates to 'for'
+
+
+import numpy as np
+import re
+import json
+from tqdm import tqdm
+
+def get_unique_words(docs, trim=0):
+    """
+        Gets unique words based on a corpora of documents
+        Trim specifies how many times a word must appear before it is registered
+
+    """
+    unique_counts = {}
+    
+    for doc in docs:
+        for word in doc.split(' '):
+            if word not in unique_counts:
+                unique_counts[word] = 1
+            else:
+                unique_counts[word] += 1
+                
+    if trim > 0:
+        keys_to_pop = [key for key in unique_counts.keys() if unique_counts[key] <= trim]
+        print('Trimming', len(keys_to_pop), ' words')
+        [unique_counts.pop(key) for key in keys_to_pop]
+        
+        unique_counts.pop('')
+    return unique_counts
+
+
+def create_bag_of_words(documents, vocabulary):
+    """
+    
+        Takes a number of documents and list of unique words
+        Returns Bag-of-Words representation with each row corresponding to a 
+        word and each columna a document. The i,j element of the matrix will
+        then by the appearences of the i'th word in the j'th document.
+    """
+    
+    # vocab_size, num_doc: i, j dimensions of numpy arrayz
+    num_doc = len(documents)
+    vocab_size = len(vocabulary)
+    
+    # Used to get an index from a word
+    word2idx = {word: idx for idx, word in enumerate(vocabulary)}
+    bag_of_words = np.zeros((vocab_size, num_doc))
+    
+    # For each document
+    
+    for idx_doc, doc in enumerate(tqdm(documents)):
+        # And for each word, increment the number of that in our bag of words
+        # Here the word2idx is our row, and idx doc is our column
+        for word in doc.split():
+            if word in uniq:
+                bag_of_words[word2idx[word], idx_doc] += 1
+            
+    return bag_of_words
+
+def get_random_words(length):
+    """
+        Gets a random series of #length# words that are bound to be in the 
+        vocabulary for. For testing purposes.
+    """
+    rands =np.random.randint(len(uniq), size = length)
+    rand_word = ' '.join([uniq[rand] for rand in rands])
+    return rand_word
+
+no_docs = 500
+
+# Open .json file, which is basically a list of dictionaries
+with open('articles.json', "r") as outfile:
+    # Load the current data from the file
+    articles = json.load(outfile)
+
+
+# Get the content for each article
+docs = [i['content'] for i in articles]
+
+print('Stripping documents ')
+# .lower everything and use regex to get only correct characters
+docs = [i.lower() for i in docs]
+docs = [re.sub('[^a-zåøæ ]+', '', i) for i in docs]
+docs = docs[0:no_docs]
+
+uniq = get_unique_words(docs, 3)
+uniq = list(uniq.keys())
+
+print('Getting bag of words')
+BoW = create_bag_of_words(docs, uniq)
+print('BOW shape is',BoW.shape)
+
+
+# Gotta insert progress meter here
+# Remember, SVD is done because of X = U*sigma*VT
+# v are the singular vectors of BoW
+# sv are the singular values of BoW
+# u is a unitary matrix, containing...somthing
+print('Performing SVD')
+U, sv, V = np.linalg.svd(BoW, full_matrices = False)
+# U and V define two different correlations
+# U define correlation between words, V between documents
+
+print('U mat',U.shape)
+print('V mat',V.shape)
+print('Singular values',sv.shape)
+
+# Define projection matrices for word_wise space
+P_word_wise = V@np.diag(1./np.sqrt(sv))
+
+print('Projection matrix shape is,', P_word_wise.shape)
+
+z_word = BoW@P_word_wise
+
+
+# Dot product of the two vectors to be examined, over the product of the length of the vectors
+# The length found as dot product of the vector and its transpose
+cos_sim = lambda x, y:  np.dot(x.T, y)/np.sqrt(np.dot(x.T, x)*np.dot(y.T,y))
+
+# Define relation word to generate symmetries to
+example_name = 'fest for første års studerende'
+#example_name = get_random_words()
+example_name = example_name.split(' ')
+
+# Define abbreviation
+abbrev = list('penis')
+
+print('Generating abbreviation', abbrev, 'based on ', example_name)
+
+
+
+word_sims = {word: [] for word in example_name}
+
+
+def get_sims(abbrev, relation, unique_words, projected_words):
+    # For each word that must be examined
+    for i, word in enumerate(relation):
+        
+        # Get the index of the word in our representations
+        word_idx = unique_words.index(word)
+        
+        # And get vector representation
+        curr_vec = projected_words[word_idx]
+        # Compare to every other word in our vocabulary
+        for r, similar in enumerate(unique_words):
+            # Only take the ones whose first letter spell abbrev.
+            if similar[0] == abbrev[i]:
+                cossim = cos_sim(curr_vec, z_word[r])
+                
+                # And only get those whose cosine similarity is above a threshold
+                if cossim >= 0.90:
+                    word_sims[word].append(similar)
+                    print(word, similar, cossim)
+
+def generate_abbrev():
+    """
+    Generates abbreviations based on known similarities
+
+    """
+    
+    i = 0
+    
+    while True:
+        current_abbrev = ''
+        for word in example_name:
+            current_abbrev += word_sims[word][i] + ' '
+        
+        print(current_abbrev)
+        
+        inp = input('Good enough? y\n')
+        
+        if inp == 'n':
+            i += 1
+            pass
+        
+        if inp == 'y':
+            break
+
+get_sims(abbrev, example_name, uniq, z_word)
+
+#generate_abbrev()
+
+

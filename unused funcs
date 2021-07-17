@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu May 27 20:31:10 2021
+
+@author: dayman
+"""
+
+print('completed')
+
+
+"""
+
+if trim:
+    # Remove words that don't appear 10 or more times
+    # These are most likely too unique to be useful
+    bag_of_words = bag_of_words[np.sum(bag_of_words, axis = 1) <= 10]
+"""
+
+"""
+# Vocabulary of unique wrods
+unique_words = []
+for doc in docs:
+    for word in doc.split(' '):
+        if word not in unique_words and len(word) != 0:
+            unique_words.append(word)
+
+
+"""
+
+"""
+P_doc_wise = np.diag(1./np.sqrt(sv))@U.T
+z_doc = P_doc_wise@BoW
+
+
+"""
+
+# =============================================================================
+# Creating term by term and doc by doc matrices
+# B = np.matmul(BoW, BoW.T)
+# C = np.matmul(BoW.T, BoW)
+# =============================================================================
